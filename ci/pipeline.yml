@@ -49,6 +49,7 @@ resources:
 
 - name: concourse-gcp-tf-bootstrap
   type: git
+  icon: github
   source:
     uri: git@github.com:EngineerBetter/concourse-gcp-tf-bootstrap.git
     private_key: ((git_private_key))
@@ -56,6 +57,7 @@ resources:
 
 - name: project-tfstate
   type: gcs
+  icon: google-cloud
   source:
     bucket: ((gcp_project_id))
     json_key: ((inception_gcp_credentials_json))
