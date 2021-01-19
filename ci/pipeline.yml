@@ -158,10 +158,10 @@ jobs:
   - in_parallel:
     - get: srt-gcp-repo
       trigger: true
-      passed:
-      - setup-project
+      passed: [setup-project]
     - get: paving
     - get: project-account-and-bucket-terraform
+      passed: [setup-project]
     - get: pcf-ops-image
   - in_parallel:
     - load_var: project-creds
