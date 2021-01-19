@@ -79,3 +79,6 @@ resource "google_project_service" "storage" {
   project = var.project_id
   service = "storage.googleapis.com"
 }
+
+data "google_compute_zones" "available" {
+}

@@ -19,10 +19,12 @@ groups:
   jobs:
   - set-pipeline
   - setup-project
+  - pave-project
 - name: teardown
   jobs:
   - set-pipeline
   - teardown-project
+  - unpave-project
 
 resource_types:
 - name: terraform
@@ -55,6 +57,14 @@ resources:
     private_key: ((git_private_key))
     branch: master
 
+- name: paving
+  type: git
+  icon: github
+  source:
+    uri: git@github.com:pivotal/paving.git
+    private_key: ((git_private_key))
+    branch: master
+
 - name: project-tfstate
   type: gcs
   icon: google-cloud
@@ -78,6 +88,18 @@ resources:
       project_id: ((gcp_project_id))
       env: ((env))
       zone_address: ((project_name)).engineerbetter.com
+
+- name: paving-terraform
+  type: terraform
+  icon: terraform
+  source:
+    env_name: ((env))-project
+    backend_type: gcs
+    backend_config:
+      bucket: ((gcp_project_id))
+      prefix: terraform/paving
+    env:
+      GOOGLE_CREDENTIALS: ((gcp_credentials_json))
 
 - name: pcf-ops-image
   type: registry-image
@@ -130,6 +152,46 @@ jobs:
       VALUE: ((.:service_creds.gcp_credentials_json))
       <<: *credhub-params
 
+- name: pave-project
+  serial: true
+  plan:
+  - in_parallel:
+    - get: srt-gcp-repo
+      trigger: true
+      passed:
+      - setup-project
+    - get: paving
+    - get: project-account-and-bucket-terraform
+    - get: pcf-ops-image
+  - in_parallel:
+    - load_var: project-creds
+      file: project-account-and-bucket-terraform/metadata
+      format: json
+    - task: nuke-pks
+      image: pcf-ops-image
+      config:
+        platform: linux
+        inputs: [name: paving]
+        outputs: [name: paving]
+        run:
+          path: bash
+          args:
+          - -euc
+          - |
+            rm -f paving/gcp/pks-*
+  - put: paving-terraform
+    params:
+      terraform_source: paving/gcp
+      vars:
+        <<: &paving-vars
+          project: ((gcp_project_id))
+          environment_name: ((env))
+          region: europe-west2
+          availability_zone: ((.:project-creds.available_zones))
+          hosted_zone: ((.:project-creds.zone_name))
+          ssl_certificate: ((.:project-creds.ssl_cert))
+          ssl_private_key: ((.:project-creds.ssl_key))
+
 - name: teardown-project
   plan:
   - in_parallel:
@@ -144,3 +206,37 @@ jobs:
       tfstate: project-tfstate
     params:
       <<: *bootstrap-params
+
+- name: unpave-project
+  serial: true
+  plan:
+  - in_parallel:
+    - get: srt-gcp-repo
+      passed:
+      - set-pipeline
+    - get: paving
+    - get: project-account-and-bucket-terraform
+    - get: pcf-ops-image
+  - in_parallel:
+    - load_var: project-creds
+      file: project-account-and-bucket-terraform/metadata
+      format: json
+    - task: nuke-pks
+      image: pcf-ops-image
+      config:
+        platform: linux
+        inputs: [name: paving]
+        outputs: [name: paving]
+        run:
+          path: bash
+          args:
+          - -euc
+          - |
+            rm -f paving/gcp/pks-*
+  - put: paving-terraform
+    params:
+      terraform_source: paving/gcp
+      action: destroy
+      get_params: {action: destroy}
+      vars:
+        <<: *paving-vars
